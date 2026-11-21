@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# edu-news — local / single-host stack
+#   docker compose up -d --build
+#   curl "http://localhost:8080/api/news?limit=3"
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: edu-news-redis
+    restart: unless-stopped
+    # News is a cache with a short life: cap memory and evict the oldest keys
+    # rather than letting Redis grow without bound.
+    command: >
+      redis-server
+      --appendonly no
+      --maxmemory 512mb
+      --maxmemory-policy volatile-lru
+      --save ""
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - redis-data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edu-news-api
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PREFIX: edunews
+
+      # Collection window
+      INGEST_LOOKBACK_DAYS: 10
+      RETENTION_DAYS: 21
+
+      # Refresh every 30 minutes, and once on boot
+      INGEST_INTERVAL_MINUTES: 30
+      INGEST_ON_BOOT: "true"
+
+      # Be a good citizen: modest concurrency, polite per-host delay
+      FETCH_CONCURRENCY: 8
+      PER_HOST_DELAY_MS: 750
+      FETCH_RETRIES: 2
+
+      # Set this to enable POST /api/ingest
+      INGEST_TOKEN: ${INGEST_TOKEN:-}
+
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "false"
+
+      # Guardian Nigeria and TheCable need headless Chromium.
+      # Requires the browser-enabled image (see docs/DEPLOYMENT.md).
+      ENABLE_BROWSER_RENDERER: "false"
+
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  redis-data:
+    driver: local

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+dist/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Test and coverage output
+coverage/
+.vitest/
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local scratch
+*.tmp
+tmp/

@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and integration tests
+        # The suite runs against the in-memory Redis backend, so no services
+        # are required here.
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  smoke:
+    name: Live source smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Hits the real publishers, so it is informational only: a publisher
+    # changing their markup should not block a merge.
+    continue-on-error: true
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ingest a sample of live sources
+        env:
+          REDIS_URL: mock://
+          LOG_LEVEL: error
+          INGEST_INTERVAL_MINUTES: '0'
+          INGEST_ON_BOOT: 'false'
+          INGEST_ONLY_SOURCES: edugist,myschoolgist,campusinfo,premiumtimes,punch
+        run: npm run ingest -- --json > ingest-report.json
+
+      - name: Show report
+        if: always()
+        run: |
+          node -e "
+            const r = require('./ingest-report.json');
+            console.log('sources ok:', r.sources_ok + '/' + r.sources_total);
+            console.log('stored:', r.stored, 'of', r.discovered, 'discovered');
+            for (const s of r.reports) {
+              console.log(String(s.source_id).padEnd(20), 'new=' + s.new_articles, s.ok ? 'ok' : 'FAIL');
+            }
+          "
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ingest-report
+          path: ingest-report.json
+          retention-days: 7
+
+  docker:
+    name: Build container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: edu-news:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the image starts and serves /api/health
+        run: |
+          docker network create edu-news-ci
+          docker run -d --name redis --network edu-news-ci redis:7-alpine
+          docker run -d --name api --network edu-news-ci \
+            -e REDIS_URL=redis://redis:6379/0 \
+            -e INGEST_ON_BOOT=false \
+            -e INGEST_INTERVAL_MINUTES=0 \
+            -e LOG_LEVEL=info \
+            -p 8080:8080 edu-news:ci
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health > /tmp/health.json 2>/dev/null; then
+              echo "health endpoint responded:"; cat /tmp/health.json; break
+            fi
+            sleep 2
+          done
+
+          grep -q '"status":"ok"' /tmp/health.json || { echo "health check failed"; docker logs api; exit 1; }
+
+          echo "--- /api/news ---"
+          curl -fsS "http://127.0.0.1:8080/api/news?limit=1" || true
+          docker logs api --tail 20
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f api redis || true
+          docker network rm edu-news-ci || true

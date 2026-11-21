@@ -1,0 +1,51 @@
+{
+  "name": "edu-news",
+  "version": "1.0.0",
+  "description": "Nigerian education news aggregation API — collects, extracts and serves the last 10 days of tertiary-education news as clean Markdown, cached in Redis.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "main": "dist/src/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ingest": "tsx scripts/ingest.ts",
+    "ingest:sources": "tsx scripts/probe-sources.ts",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "ingest:prod": "node dist/scripts/ingest.js"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "jsdom": "^25.0.1",
+    "p-limit": "^6.1.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "rss-parser": "^3.13.0",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.9.0",
+    "@types/supertest": "^7.2.1",
+    "@types/turndown": "^5.0.5",
+    "ioredis-mock": "^8.13.1",
+    "supertest": "^7.3.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}
