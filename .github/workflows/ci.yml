@@ -68,7 +68,9 @@ jobs:
           INGEST_INTERVAL_MINUTES: '0'
           INGEST_ON_BOOT: 'false'
           INGEST_ONLY_SOURCES: edugist,myschoolgist,campusinfo,premiumtimes,punch
-        run: npm run ingest -- --json > ingest-report.json
+        # --silent stops npm from printing its own "> script" banner into stdout,
+        # which would corrupt the JSON report.
+        run: npm run --silent ingest -- --json > ingest-report.json
 
       - name: Show report
         if: always()

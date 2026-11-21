@@ -243,7 +243,7 @@ annotated list.
 | `npm test` | Unit and integration tests |
 | `npm run typecheck` | Type-check without emitting |
 | `npm run ingest` | One collection pass |
-| `npm run ingest -- --json` | Machine-readable report |
+| `npm run --silent ingest -- --json` | Machine-readable report on stdout (`--silent` keeps npm's banner out) |
 | `npm run ingest -- --discovery` | Also run the Google News topic queries |
 | `npm run ingest -- --source=punch,edugist` | Restrict to specific sources |
 | `npm run ingest:sources` | Probe every publisher and report what works |
